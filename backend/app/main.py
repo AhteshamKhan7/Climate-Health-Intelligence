@@ -1,3 +1,9 @@
+from app.services.alerts import initialize_alerts_db
+from app.routers.alerts import router as alerts_router
+
+from app.routers.simulation import router as simulation_router
+from app.routers.history import router as history_router
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +17,11 @@ from app.config import (
 from app.services.open_meteo import (
     get_environmental_data,
     EnvironmentalDataError
+)
+
+from app.services.history import (
+    initialize_history_db,
+    save_assessment
 )
 
 from app.schemas.risk import AssessmentRequest
@@ -50,12 +61,22 @@ from app.engine.geographic_insights import (
 # APPLICATION INITIALIZATION
 # ==================================================
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    initialize_history_db()
+    initialize_alerts_db()
+    yield
+
+
 app = FastAPI(
     title=APP_NAME,
     description="ClimateTwin Climate-Health Intelligence Backend",
-    version=APP_VERSION
+    version=APP_VERSION,
+    lifespan=lifespan
 )
-
+app.include_router(history_router)
+app.include_router(simulation_router)
+app.include_router(alerts_router)
 
 # ==================================================
 # FRONTEND CONNECTION
@@ -108,11 +129,8 @@ async def health_check():
 
 @app.get("/api/environment")
 async def environment(
-
     latitude: float = Query(..., ge=-90, le=90),
-
     longitude: float = Query(..., ge=-180, le=180)
-
 ):
 
     try:
@@ -145,7 +163,7 @@ async def assess(request: AssessmentRequest):
             request.longitude
         )
 
-        # Step 2: Calculate all available hazard risks.
+        # Step 2: Calculate available hazard risks.
         assessment = assess_climate_health_risk(
             environmental_data=environmental_data,
             community_profile=request.community_profile
@@ -160,7 +178,10 @@ async def assess(request: AssessmentRequest):
 
         assessment["environmental_data"] = environmental_data
 
-        # Step 4: Return unified intelligence response.
+        # Step 4: Save the complete assessment.
+        save_assessment(assessment)
+
+        # Step 5: Return the unified response.
         return {
             "success": True,
             "project": "ClimateTwin",
@@ -318,8 +339,8 @@ async def geographic_assessment(
     request: GeographicAssessmentRequest
 ):
     """
-    Compare multiple geographic locations and
-    generate explainable geographic priority insights.
+    Compare multiple geographic locations,
+    generate insights, and save successful assessments.
     """
 
     try:
@@ -330,15 +351,42 @@ async def geographic_assessment(
             community_profile=request.community_profile
         )
 
-        # Step 2: Generate geographic priority insights.
+        # Step 2: Save successful location assessments.
+        saved_count = 0
+
+        for item in result["results"]:
+
+            if (
+                item.get("status") == "success"
+                and item.get("assessment") is not None
+            ):
+
+                assessment = item["assessment"]
+
+                # Attach the location to the full assessment.
+                assessment["location"] = item["location"]
+
+                save_assessment(assessment)
+
+                saved_count += 1
+
+        # Step 3: Generate geographic priority insights.
         priority_insights = generate_geographic_insights(
             result["results"]
         )
 
-        # Step 3: Attach insights to the comparison.
         result["priority_insights"] = priority_insights
 
-        # Step 4: Return the complete geographic response.
+        # Step 4: Include database storage information.
+        result["historical_storage"] = {
+            "saved_assessments": saved_count,
+            "message": (
+                "Successful location assessments were "
+                "saved to historical storage."
+            )
+        }
+
+        # Step 5: Return the complete geographic response.
         return {
             "success": True,
             "project": "ClimateTwin",

@@ -1,3 +1,10 @@
+from app.schemas.geographic import (
+    GeographicAssessmentRequest
+)
+
+from app.engine.geographic_engine import (
+    compare_geographic_locations
+)
 from app.engine.community_recommendation_engine import (
     generate_community_recommendations
 )
@@ -262,6 +269,42 @@ async def community_recommendations(
             "success": True,
             "module": "Personalized Community Recommendations",
             "result": result
+        }
+
+    except ValueError as exc:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc)
+        ) from exc
+# ==================================================
+# MODULE 4: GEOGRAPHIC RISK INTELLIGENCE
+# ==================================================
+
+@app.post("/api/geographic/assess")
+async def geographic_assessment(
+    request: GeographicAssessmentRequest
+):
+    """
+    Compare climate-health screening risks
+    across multiple geographic locations.
+    """
+
+    try:
+
+        result = await compare_geographic_locations(
+            locations=request.locations,
+            community_profile=request.community_profile
+        )
+
+        return {
+            "success": True,
+
+            "project": "ClimateTwin",
+
+            "module": "Geographic Risk Intelligence",
+
+            "comparison": result
         }
 
     except ValueError as exc:

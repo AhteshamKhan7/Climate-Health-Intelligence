@@ -1,3 +1,17 @@
+from app.engine.community_recommendation_engine import (
+    generate_community_recommendations
+)
+
+from app.engine.vulnerability_engine import (
+    get_community_profile,
+    calculate_community_risk,
+    compare_communities
+)
+
+from app.schemas.vulnerability import (
+    CommunityComparisonRequest,
+    CommunityAssessmentRequest
+)
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -128,6 +142,127 @@ async def assess(request: AssessmentRequest):
             status_code=502,
             detail=str(exc)
         ) from exc
+
+    except ValueError as exc:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc)
+        ) from exc
+
+# ==================================================
+# MODULE 3: COMMUNITY VULNERABILITY INTELLIGENCE
+# ==================================================
+
+@app.post("/api/communities/compare")
+async def community_comparison(
+    request: CommunityComparisonRequest
+):
+    """
+    Compare all supported community profiles
+    using the same environmental hazard scores.
+    """
+
+    hazard_scores = {
+        "heat": request.heat_score,
+        "air": request.air_score,
+        "rain": request.rain_score
+    }
+
+    try:
+
+        comparisons = compare_communities(
+            hazard_scores
+        )
+
+        return {
+            "success": True,
+            "module": "Community Vulnerability Intelligence",
+            "comparison_count": len(comparisons),
+            "hazard_inputs": hazard_scores,
+            "comparisons": comparisons,
+            "notice": (
+                "Community profiles are illustrative "
+                "prototype assumptions, not measured "
+                "demographic statistics."
+            )
+        }
+
+    except ValueError as exc:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc)
+        ) from exc
+
+
+@app.post("/api/communities/assess")
+async def community_assessment(
+    request: CommunityAssessmentRequest
+):
+    """
+    Assess environmental risk for one selected
+    community vulnerability profile.
+    """
+
+    hazard_scores = {
+        "heat": request.hazard_scores.heat_score,
+        "air": request.hazard_scores.air_score,
+        "rain": request.hazard_scores.rain_score
+    }
+
+    try:
+
+        result = calculate_community_risk(
+            hazard_scores,
+            request.profile
+        )
+
+        return {
+            "success": True,
+            "module": "Community Vulnerability Intelligence",
+            "assessment": result,
+            "notice": (
+                "This is an illustrative community "
+                "screening assessment, not a clinical "
+                "or demographic prediction."
+            )
+        }
+
+    except ValueError as exc:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc)
+        ) from exc
+
+# ==================================================
+# MODULE 3.3: PERSONALIZED RECOMMENDATIONS
+# ==================================================
+
+@app.post("/api/communities/recommendations")
+async def community_recommendations(
+    request: CommunityAssessmentRequest
+):
+
+    hazard_scores = {
+        "heat": request.hazard_scores.heat_score,
+        "air": request.hazard_scores.air_score,
+        "rain": request.hazard_scores.rain_score
+    }
+
+    try:
+
+        result = generate_community_recommendations(
+            hazard_scores,
+            request.profile
+        )
+
+        return {
+            "success": True,
+            "module": "Personalized Community Recommendations",
+            "result": result
+        }
 
     except ValueError as exc:
 

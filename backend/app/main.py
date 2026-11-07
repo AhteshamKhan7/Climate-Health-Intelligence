@@ -1,3 +1,7 @@
+from app.services.alerts import initialize_alerts_db
+from app.routers.alerts import router as alerts_router
+
+from app.routers.simulation import router as simulation_router
 from app.routers.history import router as history_router
 from contextlib import asynccontextmanager
 
@@ -59,10 +63,8 @@ from app.engine.geographic_insights import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize the historical database on startup."""
-
     initialize_history_db()
-
+    initialize_alerts_db()
     yield
 
 
@@ -73,7 +75,8 @@ app = FastAPI(
     lifespan=lifespan
 )
 app.include_router(history_router)
-
+app.include_router(simulation_router)
+app.include_router(alerts_router)
 
 # ==================================================
 # FRONTEND CONNECTION

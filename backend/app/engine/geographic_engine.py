@@ -94,7 +94,7 @@ async def compare_geographic_locations(
     then rank them by overall screening score.
     """
 
-    semaphore = asyncio.Semaphore(4)
+    semaphore = asyncio.Semaphore(2)
 
     async def limited_assessment(location):
         async with semaphore:

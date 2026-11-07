@@ -1,24 +1,3 @@
-from app.schemas.geographic import (
-    GeographicAssessmentRequest
-)
-
-from app.engine.geographic_engine import (
-    compare_geographic_locations
-)
-from app.engine.community_recommendation_engine import (
-    generate_community_recommendations
-)
-
-from app.engine.vulnerability_engine import (
-    get_community_profile,
-    calculate_community_risk,
-    compare_communities
-)
-
-from app.schemas.vulnerability import (
-    CommunityComparisonRequest,
-    CommunityAssessmentRequest
-)
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -40,6 +19,36 @@ from app.engine.risk_engine import (
     assess_climate_health_risk
 )
 
+from app.engine.community_recommendation_engine import (
+    generate_community_recommendations
+)
+
+from app.engine.vulnerability_engine import (
+    calculate_community_risk,
+    compare_communities
+)
+
+from app.schemas.vulnerability import (
+    CommunityComparisonRequest,
+    CommunityAssessmentRequest
+)
+
+from app.schemas.geographic import (
+    GeographicAssessmentRequest
+)
+
+from app.engine.geographic_engine import (
+    compare_geographic_locations
+)
+
+from app.engine.geographic_insights import (
+    generate_geographic_insights
+)
+
+
+# ==================================================
+# APPLICATION INITIALIZATION
+# ==================================================
 
 app = FastAPI(
     title=APP_NAME,
@@ -48,7 +57,10 @@ app = FastAPI(
 )
 
 
+# ==================================================
 # FRONTEND CONNECTION
+# ==================================================
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -62,7 +74,10 @@ app.add_middleware(
 )
 
 
+# ==================================================
 # ROOT
+# ==================================================
+
 @app.get("/")
 async def root():
 
@@ -73,7 +88,10 @@ async def root():
     }
 
 
+# ==================================================
 # HEALTH CHECK
+# ==================================================
+
 @app.get("/api/health")
 async def health_check():
 
@@ -84,7 +102,10 @@ async def health_check():
     }
 
 
+# ==================================================
 # ENVIRONMENTAL DATA
+# ==================================================
+
 @app.get("/api/environment")
 async def environment(
 
@@ -109,7 +130,10 @@ async def environment(
         ) from exc
 
 
-# INTEGRATED CLIMATE-HEALTH ASSESSMENT
+# ==================================================
+# MODULE 2: INTEGRATED CLIMATE-HEALTH ASSESSMENT
+# ==================================================
+
 @app.post("/api/assess")
 async def assess(request: AssessmentRequest):
 
@@ -157,6 +181,7 @@ async def assess(request: AssessmentRequest):
             detail=str(exc)
         ) from exc
 
+
 # ==================================================
 # MODULE 3: COMMUNITY VULNERABILITY INTELLIGENCE
 # ==================================================
@@ -203,6 +228,10 @@ async def community_comparison(
         ) from exc
 
 
+# ==================================================
+# MODULE 3.2: INDIVIDUAL COMMUNITY ASSESSMENT
+# ==================================================
+
 @app.post("/api/communities/assess")
 async def community_assessment(
     request: CommunityAssessmentRequest
@@ -243,8 +272,9 @@ async def community_assessment(
             detail=str(exc)
         ) from exc
 
+
 # ==================================================
-# MODULE 3.3: PERSONALIZED RECOMMENDATIONS
+# MODULE 3.3: PERSONALIZED COMMUNITY RECOMMENDATIONS
 # ==================================================
 
 @app.post("/api/communities/recommendations")
@@ -277,6 +307,8 @@ async def community_recommendations(
             status_code=422,
             detail=str(exc)
         ) from exc
+
+
 # ==================================================
 # MODULE 4: GEOGRAPHIC RISK INTELLIGENCE
 # ==================================================
@@ -286,24 +318,31 @@ async def geographic_assessment(
     request: GeographicAssessmentRequest
 ):
     """
-    Compare climate-health screening risks
-    across multiple geographic locations.
+    Compare multiple geographic locations and
+    generate explainable geographic priority insights.
     """
 
     try:
 
+        # Step 1: Assess all requested locations.
         result = await compare_geographic_locations(
             locations=request.locations,
             community_profile=request.community_profile
         )
 
+        # Step 2: Generate geographic priority insights.
+        priority_insights = generate_geographic_insights(
+            result["results"]
+        )
+
+        # Step 3: Attach insights to the comparison.
+        result["priority_insights"] = priority_insights
+
+        # Step 4: Return the complete geographic response.
         return {
             "success": True,
-
             "project": "ClimateTwin",
-
             "module": "Geographic Risk Intelligence",
-
             "comparison": result
         }
 

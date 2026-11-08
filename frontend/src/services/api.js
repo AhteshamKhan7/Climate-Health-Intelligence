@@ -1,11 +1,6 @@
-/**
- * ClimateTwin Central API Service
- * Handles REST calls to FastAPI backend with automatic graceful fallback to
- * authentic demonstration/modeled baseline data when the backend is offline.
- * Clearly flags data source so users always know whether data is live or modeled.
- */
 
 import axios from 'axios';
+
 import {
   MOCK_HEALTH,
   MOCK_ENVIRONMENT,
@@ -17,33 +12,76 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const apiClient = axios.create({
   baseURL: BASE_URL,
-  timeout: 5000,
+  timeout: 90000,
   headers: {
     'Content-Type': 'application/json'
   }
 });
 
-// Cache backend health status to avoid hammering an offline server
 let cachedBackendStatus = {
   isOnline: false,
   lastChecked: null,
   error: null
 };
 
+// Convert backend Open-Meteo response into the format
+// already used by the existing React dashboard.
+const normalizeEnvironment = (rawData, lat, lon) => {
+  const weather = rawData?.weather || {};
+  const air = rawData?.air_quality || {};
+  const daily = rawData?.forecast?.daily || {};
+
+  const forecastRainfall = Array.isArray(daily.precipitation_sum)
+    ? daily.precipitation_sum[0]
+    : null;
+
+  return {
+    success: rawData?.success ?? true,
+
+    location: {
+      area: 'Selected Pune Ward',
+      lat: rawData?.location?.latitude ?? lat,
+      lon: rawData?.location?.longitude ?? lon,
+      timezone: rawData?.location?.timezone ?? null
+    },
+
+    readings: {
+      temperature: weather.temperature_c ?? null,
+      apparentTemperature: weather.feels_like_c ?? null,
+      humidity: weather.humidity_percent ?? null,
+
+      // Current precipitation, not historical 24-hour rainfall.
+      rainfall: weather.precipitation_mm ?? null,
+
+      forecastRainfall: forecastRainfall,
+
+      aqi: air.us_aqi ?? null,
+      pm25: air.pm25_ug_m3 ?? null,
+      pm10: air.pm10_ug_m3 ?? null,
+      no2: air.nitrogen_dioxide_ug_m3 ?? null,
+      o3: air.ozone_ug_m3 ?? null,
+
+      windSpeed: weather.wind_speed_kmh ?? null
+    },
+
+    metadata: rawData?.metadata ?? {},
+    forecast: rawData?.forecast ?? {},
+    rawBackendData: rawData
+  };
+};
+
 export const apiService = {
-  /**
-   * Check FastAPI Backend Health
-   * GET /api/health
-   */
   async checkHealth() {
     try {
       const response = await apiClient.get('/api/health');
+
       cachedBackendStatus = {
         isOnline: true,
         lastChecked: new Date().toISOString(),
         error: null,
         data: response.data
       };
+
       return {
         isLive: true,
         data: response.data
@@ -52,8 +90,9 @@ export const apiService = {
       cachedBackendStatus = {
         isOnline: false,
         lastChecked: new Date().toISOString(),
-        error: err.message || 'FastAPI backend connection refused'
+        error: err.message || 'Backend connection failed'
       };
+
       return {
         isLive: false,
         data: MOCK_HEALTH,
@@ -62,31 +101,35 @@ export const apiService = {
     }
   },
 
-  /**
-   * Get Environmental Readings for Pune coordinates
-   * GET /api/environment?lat=18.5204&lon=73.8567
-   */
-  async getEnvironment(lat = 18.5204, lon = 73.8567) {
+  async getEnvironment(latitude = 18.5204, longitude = 73.8567) {
     try {
       const response = await apiClient.get('/api/environment', {
-        params: { lat, lon }
+        params: {
+          latitude,
+          longitude
+        }
       });
+
       return {
         isLive: true,
-        dataSource: 'Live FastAPI Backend Feed',
-        data: response.data
+        dataSource: 'Live Open-Meteo Data via FastAPI',
+        data: normalizeEnvironment(
+          response.data,
+          latitude,
+          longitude
+        ),
+        rawData: response.data
       };
     } catch (err) {
-      // Return modeled demonstration dataset with clear flag
       return {
         isLive: false,
-        dataSource: 'Modeled Baseline Demonstration Data (Backend Offline)',
+        dataSource: 'Modeled Demonstration Data (Backend Offline)',
         data: {
           ...MOCK_ENVIRONMENT,
           location: {
             ...MOCK_ENVIRONMENT.location,
-            lat,
-            lon
+            lat: latitude,
+            lon: longitude
           }
         },
         error: err.message
@@ -94,56 +137,100 @@ export const apiService = {
     }
   },
 
-  /**
-   * Run Dynamic Climate-Health Risk Assessment
-   * POST /api/assess
-   */
   async assessRisk(payload) {
     try {
       const response = await apiClient.post('/api/assess', payload);
+
       return {
         isLive: true,
-        dataSource: 'Live AI Risk Model (FastAPI)',
-        data: response.data
+        dataSource: 'Live Backend Climate-Health Assessment',
+        data: response.data.assessment,
+        rawData: response.data
       };
     } catch (err) {
-      // Generate client-side modeled assessment
-      const fallbackData = generateMockAssessment(payload);
       return {
         isLive: false,
-        dataSource: 'Client-Side Modeled Assessment (Demo Fallback)',
-        data: fallbackData,
+        dataSource: 'Client-Side Demonstration Assessment',
+        data: generateMockAssessment(payload),
         error: err.message
       };
     }
   },
 
-  /**
-   * Run What-If Scenario Simulation
-   * POST /api/simulate
-   */
   async simulateScenario(payload) {
     try {
       const response = await apiClient.post('/api/simulate', payload);
+
       return {
         isLive: true,
         dataSource: 'FastAPI Simulation Engine',
-        data: response.data
+        data: response.data,
+        rawData: response.data
       };
     } catch (err) {
-      const fallbackSimulation = generateMockSimulation(payload);
       return {
         isLive: false,
-        dataSource: 'Client Simulation Engine (Offline Scenario)',
-        data: fallbackSimulation,
+        dataSource: 'Client-Side Demonstration Simulation',
+        data: generateMockSimulation(payload),
         error: err.message
       };
     }
   },
 
-  /**
-   * Retrieve cached status
-   */
+  async getHistory(params = {}) {
+    const response = await apiClient.get('/api/history', { params });
+    return response.data;
+  },
+
+  async getHistoryTrends(params = {}) {
+    const response = await apiClient.get('/api/history/trends', { params });
+    return response.data;
+  },
+
+  async assessGeographicLocations(payload) {
+    const response = await apiClient.post('/api/geographic/assess', payload);
+    return response.data;
+  },
+
+  async compareCommunities(payload) {
+    const response = await apiClient.post('/api/communities/compare', payload);
+    return response.data;
+  },
+
+  async assessCommunity(payload) {
+    const response = await apiClient.post('/api/communities/assess', payload);
+    return response.data;
+  },
+
+  async getCommunityRecommendations(payload) {
+    const response = await apiClient.post('/api/communities/recommendations', payload);
+    return response.data;
+  },
+
+  async evaluateAlerts(payload) {
+    const response = await apiClient.post('/api/alerts/evaluate', payload);
+    return response.data;
+  },
+
+  async getAlerts(params = {}) {
+    const response = await apiClient.get('/api/alerts', { params });
+    return response.data;
+  },
+
+  async getAlert(alertId) {
+    const response = await apiClient.get(`/api/alerts/${encodeURIComponent(alertId)}`);
+    return response.data;
+  },
+
+  async updateAlertStatus(alertId, status) {
+    const response = await apiClient.patch(
+      `/api/alerts/${encodeURIComponent(alertId)}/status`,
+      { status }
+    );
+
+    return response.data;
+  },
+
   getBackendStatus() {
     return cachedBackendStatus;
   },
@@ -154,4 +241,3 @@ export const apiService = {
 };
 
 export default apiService;
-
